@@ -491,8 +491,10 @@
       if (bResolveComplexTypes && !Nodes[nodeIndex].firstChildIndex) {
         if (mynode.type == NodeTypeComplex && mynode.typeName && mynode.typeName.length > 0)
           ResolveComplexType(nodeIndex);
-        if (mynode.baseTypeName && mynode.baseTypeName.length > 0)
+        if (mynode.baseTypeName && mynode.baseTypeName.length > 0) {
           ResolveSimpleBaseType(nodeIndex);
+		  ResolveComplexBaseType(nodeIndex);
+		}
       }
     }
 
@@ -709,7 +711,71 @@
     }
   }
 
+
+  function ResolveComplexBaseType(nodeIndex)
+  {
+    var baseTypeName = Nodes[nodeIndex].baseTypeName;
+    var complexTypeIndex = null;
+    var i = 1;
+
+    while (i < ComplexTypes.length && !complexTypeIndex) {
+      if (ComplexTypes[i].name == baseTypeName)
+        complexTypeIndex = i;
+      else
+        i++;
+    }
+    if (complexTypeIndex) {
+      var sourceNodeIndex = ComplexTypes[complexTypeIndex].nodeIndex;
+	  var sourceNode = Nodes[sourceNodeIndex];
+	  var prefix = sourceNode.name.split(':')[0];
+	  var namespace = FindNamespaceByPrefix(prefix);
+	  if (namespace != null) {
+		var xsdPath = ExtractXsdPath(namespace.schemaURL);
+        var url = window.location.href.split('?')[0] + "?xsd=" + xsdPath + "&root=" + sourceNode.name.split(':')[1];
+	    Nodes[nodeIndex].baseTypeURL = url;
+	  }
+    }
+  }
   
+  function ExtractXsdPath(schemaURL) {
+	var path = schemaURL.split('//')[1];
+	path = path.substring(path.indexOf('/',0)+1);
+	path = path.slice(0, -4);
+	
+	var splitPath = path.split('/');
+	RemoveDotSegment(splitPath);
+	var xsdPath = BuildPathFromSplit(splitPath);
+	return xsdPath;
+  }
+  
+  function BuildPathFromSplit(splitPath) {
+	splitPathSize = splitPath.length;
+	if (splitPathSize == 1)
+	  return splitPath;
+	var path = "";
+	for (var i=0; i < splitPathSize; i++) {
+	  path = path + splitPath[i];
+	  if (i != splitPathSize)
+		  path = path + '/';
+	}
+	return path;
+  }
+  
+  function RemoveDotSegment(splitPath)
+  {
+	if (splitPath.length < 2)
+		return splitPath;
+	for (i = 1; i < splitPath.length; i++) {
+	  if (splitPath[i] == "..") {
+		splitPath.splice(i-1, 1);
+		splitPath.splice(i-1, 1);
+		
+		RemoveDotSegment(splitPath);
+	  }
+	}
+  }
+
+
   function ResolveNamespaces(schemaNode)
   {
     for(var i = 0; i < schemaNode.attributes.length; i++) {
@@ -826,6 +892,7 @@
         if (schemaLocation) {
           statusText.innerHTML = "Loading include file '" + schemaLocation + "' ...";
           schemaURL = sourcePath + schemaLocation;
+		  namespace.schemaURL = schemaURL;
 		  /*
           xhttp = new XMLHttpRequest();
           xhttp.overrideMimeType('text/xml');
@@ -2650,7 +2717,38 @@
   function ClickDetected(event)
   {
     var nodeIndex = getObjectAtCursor(canvas, event);
-    NodeClicked(nodeIndex, true);
+	if (window.event.shiftKey)
+	  ShiftClickDetected(nodeIndex);
+    else
+      NodeClicked(nodeIndex, true);
+  }
+
+  function ShiftClickDetected(nodeIndex)
+  {
+	var baseTypeURL = Nodes[nodeIndex].baseTypeURL;
+    if (baseTypeURL != null) {
+		openNewURLInTheSameWindow(baseTypeURL);
+	}
+  }
+
+  // this function can fire onclick handler for any DOM-Element
+  function fireClickEvent(element) {
+    var evt = new window.MouseEvent('click', {
+        view: window,
+        bubbles: true,
+        cancelable: true
+    });
+
+    element.dispatchEvent(evt);
+  }
+
+  // this function will setup a virtual anchor element
+  // and fire click handler to open new URL in the same room
+  // it works better than location.href=something or location.reload()
+  function openNewURLInTheSameWindow(targetURL) {
+    var a = document.createElement('a');
+    a.href = targetURL;
+    fireClickEvent(a);
   }
 
   /*
